@@ -14,6 +14,7 @@ export interface Mountain {
   lng: number;   // longitude in degrees
   color: string; // region color
   description: string;
+  photoUrl: string; // real mountain peak photo
 }
 
 export const MOUNTAINS: Mountain[] = [
@@ -28,6 +29,7 @@ export const MOUNTAINS: Mountain[] = [
     lng: 86.925,
     color: '#FF6B6B',
     description: '世界最高峰，位于中国与尼泊尔边境',
+    photoUrl: '/mountains/everest.jpg',
   },
   {
     id: 'mont-blanc',
@@ -40,6 +42,7 @@ export const MOUNTAINS: Mountain[] = [
     lng: 6.8656,
     color: '#4ECDC4',
     description: '西欧最高峰，位于法国与意大利边境',
+    photoUrl: '/mountains/mont-blanc.jpg',
   },
   {
     id: 'denali',
@@ -52,6 +55,7 @@ export const MOUNTAINS: Mountain[] = [
     lng: -151.0074,
     color: '#45B7D1',
     description: '北美洲最高峰，位于美国阿拉斯加',
+    photoUrl: '/mountains/denali.jpg',
   },
   {
     id: 'aconcagua',
@@ -64,6 +68,7 @@ export const MOUNTAINS: Mountain[] = [
     lng: -70.0117,
     color: '#96CEB4',
     description: '南美洲最高峰，位于阿根廷',
+    photoUrl: '/mountains/aconcagua.jpg',
   },
   {
     id: 'kilimanjaro',
@@ -76,6 +81,7 @@ export const MOUNTAINS: Mountain[] = [
     lng: 37.3556,
     color: '#FFEAA7',
     description: '非洲最高峰，位于坦桑尼亚',
+    photoUrl: '/mountains/kilimanjaro.jpg',
   },
   {
     id: 'mount-cook',
@@ -88,6 +94,7 @@ export const MOUNTAINS: Mountain[] = [
     lng: 170.1419,
     color: '#DDA0DD',
     description: '新西兰最高峰',
+    photoUrl: '/mountains/mount-cook.jpg',
   },
   {
     id: 'vinson',
@@ -100,5 +107,6 @@ export const MOUNTAINS: Mountain[] = [
     lng: -85.6171,
     color: '#98D8C8',
     description: '南极洲最高峰',
+    photoUrl: '/mountains/vinson.jpg',
   },
 ];

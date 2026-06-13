@@ -1,93 +1,98 @@
 import { useRef, useMemo, useState } from 'react';
-import { useFrame } from '@react-three/fiber';
-import { Html, Sparkles } from '@react-three/drei';
+import { useFrame, useThree } from '@react-three/fiber';
+import { Html } from '@react-three/drei';
 import * as THREE from 'three';
 import { MOUNTAINS, type Mountain } from '../data/mountains';
-import { latLngToPosition, createMountainGeometry } from '../utils/geo';
+import { latLngToPosition } from '../utils/geo';
 
 const EARTH_RADIUS = 1.5;
 const MARKER_OFFSET = 0.06;
 
-function MountainMarker({ mountain }: { mountain: Mountain }) {
-  const meshRef = useRef<THREE.Mesh>(null);
-  const [hovered, setHovered] = useState(false);
+// --- Photo marker size matching the original 3D cone (~12–36px on screen) ---
+const MIN_HEIGHT = 3724;
+const MAX_HEIGHT = 8848;
+const MARKER_MIN = 2;   // px width for smallest mountain
+const MARKER_MAX = 4;   // px width for tallest mountain
 
-  const position = useMemo(
-    () => latLngToPosition(mountain.lat, mountain.lng, EARTH_RADIUS + MARKER_OFFSET),
-    [mountain.lat, mountain.lng]
+function getMarkerSize(height: number) {
+  return Math.round(
+    MARKER_MIN + ((height - MIN_HEIGHT) / (MAX_HEIGHT - MIN_HEIGHT)) * (MARKER_MAX - MARKER_MIN)
   );
+}
+
+function MountainMarker({ mountain }: { mountain: Mountain }) {
+  const photoRef = useRef<HTMLDivElement>(null);
+  const labelRef = useRef<HTMLDivElement>(null);
+  const [hovered, setHovered] = useState(false);
+  const [imgError, setImgError] = useState(false);
+  const { camera } = useThree();
 
   const normal = useMemo(
     () => latLngToPosition(mountain.lat, mountain.lng, 1).normalize(),
     [mountain.lat, mountain.lng]
   );
 
-  const quaternion = useMemo(() => {
-    const q = new THREE.Quaternion();
-    q.setFromUnitVectors(new THREE.Vector3(0, 1, 0), normal);
-    return q;
-  }, [normal]);
-
-  const geometry = useMemo(
-    () => createMountainGeometry(mountain.height),
-    [mountain.height]
-  );
-
-  useFrame((_, delta) => {
-    if (meshRef.current) {
-      const target = hovered ? 1.6 : 1 + Math.sin(Date.now() * 0.003) * 0.15;
-      meshRef.current.scale.lerp(
-        new THREE.Vector3(target, target, target),
-        delta * 5
-      );
-    }
-  });
-
-  const labelPosition = useMemo(
-    () => latLngToPosition(mountain.lat, mountain.lng, EARTH_RADIUS + 0.25),
+  const photoPos = useMemo(
+    () => latLngToPosition(mountain.lat, mountain.lng, EARTH_RADIUS + MARKER_OFFSET),
     [mountain.lat, mountain.lng]
   );
 
+  const labelPos = useMemo(
+    () => latLngToPosition(mountain.lat, mountain.lng, EARTH_RADIUS + 0.13),
+    [mountain.lat, mountain.lng]
+  );
+
+  const markerPx = useMemo(() => getMarkerSize(mountain.height), [mountain.height]);
+
+  useFrame(() => {
+    const cameraDir = camera.position.clone().normalize();
+    const facing = normal.dot(cameraDir);
+    const targetOpacity = THREE.MathUtils.clamp((facing + 0.05) / 0.2, 0, 1);
+
+    if (photoRef.current) {
+      photoRef.current.style.opacity = String(targetOpacity);
+    }
+    if (labelRef.current) {
+      labelRef.current.style.opacity = String(targetOpacity);
+      labelRef.current.style.pointerEvents = targetOpacity > 0.3 ? 'auto' : 'none';
+    }
+  });
+
   return (
     <group>
-      {/* Mountain peak (cone) */}
-      <mesh
-        ref={meshRef}
-        position={position}
-        quaternion={quaternion}
-        geometry={geometry}
-        onPointerEnter={() => setHovered(true)}
-        onPointerLeave={() => setHovered(false)}
-      >
-        <meshStandardMaterial
-          color={mountain.color}
-          emissive={mountain.color}
-          emissiveIntensity={0.5}
-          roughness={0.3}
-          metalness={0.3}
-        />
-      </mesh>
-
-      {/* Base ring */}
-      <mesh position={position} quaternion={quaternion}>
-        <torusGeometry args={[0.028, 0.006, 16, 32]} />
-        <meshBasicMaterial color={mountain.color} transparent opacity={0.8} />
-      </mesh>
-
-      {/* Glow point */}
-      <mesh position={position}>
-        <sphereGeometry args={[0.015, 16, 16]} />
-        <meshBasicMaterial color={mountain.color} transparent opacity={0.9} />
-      </mesh>
-
-      {/* HTML Label on the sphere */}
-      <Html position={labelPosition} center style={{ pointerEvents: 'none' }}>
+      {/* Photo — tiny, on Earth surface */}
+      <Html position={photoPos} center transform occlude={false}>
         <div
+          ref={photoRef}
+          className="mountain-photo-marker"
+          onPointerEnter={() => setHovered(true)}
+          onPointerLeave={() => setHovered(false)}
+          style={{
+            width: hovered ? Math.round(markerPx * 1.8) : markerPx,
+            height: hovered ? Math.round(markerPx * 1.8 * 0.66) : Math.round(markerPx * 0.66),
+          }}
+        >
+          {!imgError && (
+            <img
+              src={mountain.photoUrl}
+              alt={mountain.nameZh}
+              className="marker-photo"
+              onError={() => setImgError(true)}
+            />
+          )}
+        </div>
+      </Html>
+
+      {/* Label — original size, no transform, positioned to the side */}
+      <Html position={labelPos} center style={{ pointerEvents: 'none' }}>
+        <div
+          ref={labelRef}
           className="mountain-label"
           style={{
             borderColor: mountain.color,
-            opacity: hovered ? 1 : 0.7,
-            transform: hovered ? 'scale(1.1)' : 'scale(1)',
+            opacity: 0.7,
+            transition: 'opacity 0.3s ease, transform 0.3s ease',
+            transform: hovered ? 'scale(1.05)' : 'scale(1)',
           }}
         >
           <div className="mountain-name">{mountain.nameZh}</div>
@@ -99,8 +104,6 @@ function MountainMarker({ mountain }: { mountain: Mountain }) {
 }
 
 export function Earth() {
-  const groupRef = useRef<THREE.Group>(null);
-
   const earthTexture = useMemo(() => {
     const textureUrl =
       'https://unpkg.com/three-globe/example/img/earth-blue-marble.jpg';
@@ -114,14 +117,8 @@ export function Earth() {
     []
   );
 
-  useFrame((_, delta) => {
-    if (groupRef.current) {
-      groupRef.current.rotation.y += delta * 0.06;
-    }
-  });
-
   return (
-    <group ref={groupRef}>
+    <group>
       {/* Earth sphere */}
       <mesh>
         <sphereGeometry args={[EARTH_RADIUS, 64, 64]} />
@@ -156,20 +153,10 @@ export function Earth() {
         />
       </mesh>
 
-      {/* Mountain markers */}
+      {/* Mountain photo markers */}
       {MOUNTAINS.map((mountain) => (
         <MountainMarker key={mountain.id} mountain={mountain} />
       ))}
-
-      {/* Floating particles */}
-      <Sparkles
-        count={300}
-        scale={EARTH_RADIUS * 2.4}
-        size={3}
-        speed={0.15}
-        opacity={0.25}
-        color="#ffffff"
-      />
     </group>
   );
 }

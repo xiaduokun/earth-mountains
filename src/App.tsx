@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef, useCallback } from 'react';
 import { Canvas } from '@react-three/fiber';
 import { Stars, OrbitControls } from '@react-three/drei';
 import { Earth } from './components/EarthScene';
@@ -7,6 +7,28 @@ import './App.css';
 
 function App() {
   const [selectedMountain, setSelectedMountain] = useState<Mountain | null>(null);
+  const controlsRef = useRef<any>(null);
+  const idleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const handleUserInteractionStart = useCallback(() => {
+    // User started dragging — cancel pending resume and stop auto-rotate
+    if (idleTimerRef.current) {
+      clearTimeout(idleTimerRef.current);
+      idleTimerRef.current = null;
+    }
+    if (controlsRef.current) {
+      controlsRef.current.autoRotate = false;
+    }
+  }, []);
+
+  const handleUserInteractionEnd = useCallback(() => {
+    // User stopped dragging — wait 5 minutes then resume auto-rotate
+    idleTimerRef.current = setTimeout(() => {
+      if (controlsRef.current) {
+        controlsRef.current.autoRotate = true;
+      }
+    }, 5 * 60 * 1000);
+  }, []);
 
   return (
     <div className="app">
@@ -31,6 +53,7 @@ function App() {
         />
 
         <OrbitControls
+          ref={controlsRef}
           enablePan={false}
           minDistance={2.5}
           maxDistance={8}
@@ -38,6 +61,8 @@ function App() {
           autoRotateSpeed={0.3}
           enableDamping
           dampingFactor={0.08}
+          onStart={handleUserInteractionStart}
+          onEnd={handleUserInteractionEnd}
         />
 
         <Earth />
