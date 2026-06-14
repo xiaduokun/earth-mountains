@@ -27,9 +27,14 @@ function mountainProfile(baseRadius: number, height: number): THREE.Vector2[] {
   return points;
 }
 
+const LINE_SEGMENTS = 3; // peak → elbow → label, 3 points
+
 function MountainMarker({ mountain }: { mountain: Mountain }) {
   const meshRef = useRef<THREE.Mesh>(null);
-  const lineRef = useRef<THREE.Line>(null);
+  const labelGroupRef = useRef<THREE.Group>(null);
+  const labelDivRef = useRef<HTMLDivElement>(null);
+  const lineGeoRef = useRef<THREE.BufferGeometry>(null);
+  const lineMatRef = useRef<THREE.LineDashedMaterial>(null);
   const [hovered, setHovered] = useState(false);
   const { camera } = useThree();
 
@@ -59,89 +64,117 @@ function MountainMarker({ mountain }: { mountain: Mountain }) {
     [baseRadius, mountainHeight]
   );
 
-  const { labelX, labelY, lineGeometry } = useMemo(() => {
-    const peakY = mountainHeight;
-    const labelX = 0.07;
-    const labelY = mountainHeight * 0.5;
-    // L-shaped connector: peak → horizontal elbow → label anchor
-    const pts = [
-      new THREE.Vector3(0, peakY, 0),           // mountain peak
-      new THREE.Vector3(labelX, peakY, 0),       // elbow (same height, to the right)
-      new THREE.Vector3(labelX, labelY, 0),       // label anchor point
-    ];
-    const geo = new THREE.BufferGeometry().setFromPoints(pts);
-    return { labelX, labelY, lineGeometry: geo };
-  }, [mountainHeight]);
+  // Peak relative to mountain base (local space)
+  const peakLocal = useMemo(() => new THREE.Vector3(0, mountainHeight, 0), [mountainHeight]);
 
+  // Pre-allocate line geometry positions (3 points × 3 coords)
   const lineObj = useMemo(() => {
-    const line = new THREE.Line(
-      lineGeometry,
-      new THREE.LineDashedMaterial({
-        color: mountain.color,
-        dashSize: 0.012,
-        gapSize: 0.006,
-        transparent: true,
-        opacity: 0.85,
-      }),
-    );
-    line.computeLineDistances();
+    const geo = new THREE.BufferGeometry();
+    const arr = new Float32Array(LINE_SEGMENTS * 3);
+    geo.setAttribute('position', new THREE.BufferAttribute(arr, 3));
+    const mat = new THREE.LineDashedMaterial({
+      color: mountain.color,
+      dashSize: 0.012,
+      gapSize: 0.006,
+      transparent: true,
+      opacity: 0.85,
+    });
+    const line = new THREE.Line(geo, mat);
+    lineGeoRef.current = geo;
+    lineMatRef.current = mat;
     return line;
-  }, [lineGeometry, mountain.color]);
+  }, [mountain.color]);
 
   useFrame(() => {
     const cameraDir = camera.position.clone().normalize();
     const facing = normal.dot(cameraDir);
     const opacity = THREE.MathUtils.clamp((facing + 0.05) / 0.2, 0, 1);
 
+    // Mountain opacity
     if (meshRef.current) {
       const mat = meshRef.current.material as THREE.MeshStandardMaterial;
       mat.opacity = opacity;
       mat.transparent = true;
     }
-    if (lineRef.current) {
-      const mat = lineRef.current.material as THREE.LineBasicMaterial;
-      mat.opacity = opacity;
-      mat.transparent = true;
+
+    // Compute screen-right vector in world space
+    const camRight = new THREE.Vector3()
+      .crossVectors(camera.up, cameraDir)
+      .normalize();
+
+    // Peak in world space
+    const peakWorld = peakLocal.clone().applyQuaternion(quaternion).add(meshPos);
+
+    // Label world position: peak + screen-right × offset - slight vertical drop
+    const labelOffset = camRight.clone().multiplyScalar(0.07);
+    const labelWorld = peakWorld.clone()
+      .add(labelOffset)
+      .add(new THREE.Vector3(0, -mountainHeight * 0.45, 0));
+
+    // Update label group position
+    if (labelGroupRef.current) {
+      labelGroupRef.current.position.copy(labelWorld);
+    }
+    // Fade label DOM element
+    if (labelDivRef.current) {
+      labelDivRef.current.style.opacity = String(opacity);
+    }
+
+    // Update dashed line: peak → elbow → label
+    if (lineGeoRef.current && lineMatRef.current) {
+      const elbow = peakWorld.clone().add(camRight.clone().multiplyScalar(0.06));
+      const pos = lineGeoRef.current.attributes.position.array as Float32Array;
+      pos[0] = peakWorld.x; pos[1] = peakWorld.y; pos[2] = peakWorld.z;
+      pos[3] = elbow.x;     pos[4] = elbow.y;     pos[5] = elbow.z;
+      pos[6] = labelWorld.x; pos[7] = labelWorld.y; pos[8] = labelWorld.z;
+      lineGeoRef.current.attributes.position.needsUpdate = true;
+      lineObj.computeLineDistances();
+
+      lineMatRef.current.opacity = opacity;
+      lineMatRef.current.transparent = true;
     }
   });
 
   const targetScale = hovered ? 1.5 : 1;
 
   return (
-    <group position={meshPos} quaternion={quaternion}>
-      {/* 3D Mountain Mesh */}
-      <mesh
-        ref={meshRef}
-        geometry={mountainGeom}
-        onPointerEnter={() => setHovered(true)}
-        onPointerLeave={() => setHovered(false)}
-        scale={[targetScale, targetScale, targetScale]}
-      >
-        <meshStandardMaterial
-          map={texture}
-          roughness={0.7}
-          metalness={0.05}
-          transparent
-          opacity={1}
-        />
-      </mesh>
-
-      {/* Dashed connector: peak → label */}
-      <primitive object={lineObj} ref={lineRef} />
-
-      {/* Label — right side */}
-      <Html position={[labelX + 0.005, labelY, 0]} center={false} style={{ pointerEvents: 'none', transform: 'translateY(-50%)' }}>
-        <div
-          className="mountain-label"
-          style={{
-            borderColor: mountain.color,
-          }}
+    <>
+      {/* Mountain — rotated group (aligned to Earth surface normal) */}
+      <group position={meshPos} quaternion={quaternion}>
+        <mesh
+          ref={meshRef}
+          geometry={mountainGeom}
+          onPointerEnter={() => setHovered(true)}
+          onPointerLeave={() => setHovered(false)}
+          scale={[targetScale, targetScale, targetScale]}
         >
-          <div className="mountain-name">{mountain.nameZh}</div>
-          <div className="mountain-height">{mountain.height.toLocaleString()}m</div>
-        </div>
-      </Html>
-    </group>
+          <meshStandardMaterial
+            map={texture}
+            roughness={0.7}
+            metalness={0.05}
+            transparent
+            opacity={1}
+          />
+        </mesh>
+      </group>
+
+      {/* Dashed connector — world space, updated each frame */}
+      <primitive object={lineObj} />
+
+      {/* Label — world space, always screen-right of the peak */}
+      <group ref={labelGroupRef}>
+        <Html center style={{ pointerEvents: 'none' }}>
+          <div
+            ref={labelDivRef}
+            className="mountain-label"
+            style={{ borderColor: mountain.color }}
+          >
+            <div className="mountain-name">{mountain.nameZh}</div>
+            <div className="mountain-height">{mountain.height.toLocaleString()}m</div>
+          </div>
+        </Html>
+      </group>
+    </>
   );
 }
 
