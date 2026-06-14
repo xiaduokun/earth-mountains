@@ -2,11 +2,13 @@ import { useState, useRef, useCallback } from 'react';
 import { Canvas } from '@react-three/fiber';
 import { Stars, OrbitControls } from '@react-three/drei';
 import { Earth } from './components/EarthScene';
+import { ChinaMap } from './components/ChinaMap';
 import { MOUNTAINS, type Mountain } from './data/mountains';
 import './App.css';
 
 function App() {
   const [selectedMountain, setSelectedMountain] = useState<Mountain | null>(null);
+  const [viewMode, setViewMode] = useState<'globe' | 'china'>('globe');
   const controlsRef = useRef<any>(null);
   const idleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -65,34 +67,43 @@ function App() {
           onEnd={handleUserInteractionEnd}
         />
 
-        <Earth />
+        <Earth onChinaClick={() => setViewMode('china')} />
       </Canvas>
+
+      <ChinaMap
+        visible={viewMode === 'china'}
+        onBack={() => setViewMode('globe')}
+      />
 
       {/* === HTML Overlays === */}
 
       {/* Top info panel */}
-      <div className="info-panel">
-        <h1 className="title">🌍 世界名山</h1>
-        <p className="subtitle">拖动旋转 · 滚轮缩放 · 悬停标记查看详情</p>
-      </div>
+      {viewMode === 'globe' && (
+        <div className="info-panel">
+          <h1 className="title">🌍 世界名山</h1>
+          <p className="subtitle">拖动旋转 · 滚轮缩放 · 悬停标记查看详情</p>
+        </div>
+      )}
 
       {/* Bottom legend */}
-      <div className="legend">
-        {MOUNTAINS.map((m) => (
-          <button
-            key={m.id}
-            className={`legend-item ${selectedMountain?.id === m.id ? 'active' : ''}`}
-            onClick={() =>
-              setSelectedMountain((prev) => (prev?.id === m.id ? null : m))
-            }
-          >
-            <span className="legend-dot" style={{ background: m.color }} />
-            <span className="legend-name">{m.nameZh}</span>
-            <span className="legend-region">{m.regionZh}</span>
-            <span className="legend-height">{m.height.toLocaleString()}m</span>
-          </button>
-        ))}
-      </div>
+      {viewMode === 'globe' && (
+        <div className="legend">
+          {MOUNTAINS.map((m) => (
+            <button
+              key={m.id}
+              className={`legend-item ${selectedMountain?.id === m.id ? 'active' : ''}`}
+              onClick={() =>
+                setSelectedMountain((prev) => (prev?.id === m.id ? null : m))
+              }
+            >
+              <span className="legend-dot" style={{ background: m.color }} />
+              <span className="legend-name">{m.nameZh}</span>
+              <span className="legend-region">{m.regionZh}</span>
+              <span className="legend-height">{m.height.toLocaleString()}m</span>
+            </button>
+          ))}
+        </div>
+      )}
 
       {/* Mountain detail card */}
       {selectedMountain && (
