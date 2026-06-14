@@ -35,6 +35,8 @@ function App() {
   const [selectedMountain, setSelectedMountain] = useState<Mountain | null>(null);
   const [zoomed, setZoomed] = useState(false);
   const controlsRef = useRef<any>(null);
+  const zoomedRef = useRef(zoomed);
+  zoomedRef.current = zoomed;
   const idleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const handleUserInteractionStart = useCallback(() => {
@@ -45,6 +47,10 @@ function App() {
     if (controlsRef.current) {
       controlsRef.current.autoRotate = false;
     }
+  }, []);
+
+  const handleChinaClick = useCallback(() => {
+    setZoomed(true);
   }, []);
 
   const handleUserInteractionEnd = useCallback(() => {
@@ -91,7 +97,7 @@ function App() {
 
         <CameraAnimator zoomed={zoomed} controlsRef={controlsRef} />
 
-        <Earth zoomed={zoomed} onChinaClick={() => setZoomed(true)} />
+        <Earth zoomed={zoomed} onChinaClick={handleChinaClick} />
       </Canvas>
 
       {/* === HTML Overlays === */}
