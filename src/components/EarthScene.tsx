@@ -1,6 +1,6 @@
-import { useRef, useMemo, useState } from 'react';
+import { useRef, useMemo, useState, useEffect } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
-import { Html, useTexture } from '@react-three/drei';
+import { Html } from '@react-three/drei';
 import * as THREE from 'three';
 import { MOUNTAINS, type Mountain } from '../data/mountains';
 import { latLngToPosition } from '../utils/geo';
@@ -32,7 +32,18 @@ function MountainMarker({ mountain }: { mountain: Mountain }) {
   const [hovered, setHovered] = useState(false);
   const { camera } = useThree();
 
-  const texture = useTexture(mountain.photoUrl);
+  const [texture, setTexture] = useState<THREE.Texture | null>(null);
+  const [textureError, setTextureError] = useState(false);
+
+  useEffect(() => {
+    const loader = new THREE.TextureLoader();
+    loader.load(
+      mountain.photoUrl,
+      (tex) => setTexture(tex),
+      undefined,
+      () => setTextureError(true)
+    );
+  }, [mountain.photoUrl]);
 
   const normal = useMemo(
     () => latLngToPosition(mountain.lat, mountain.lng, 1).normalize(),
@@ -83,8 +94,8 @@ function MountainMarker({ mountain }: { mountain: Mountain }) {
         scale={[targetScale, targetScale, targetScale]}
       >
         <meshStandardMaterial
-          map={texture}
-          color={'#ffffff'}
+          map={textureError ? null : texture}
+          color={textureError ? mountain.color : '#ffffff'}
           roughness={0.7}
           metalness={0.05}
           transparent
