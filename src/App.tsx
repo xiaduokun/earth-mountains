@@ -1,19 +1,43 @@
 import { useState, useRef, useCallback } from 'react';
-import { Canvas } from '@react-three/fiber';
+import { Canvas, useFrame } from '@react-three/fiber';
 import { Stars, OrbitControls } from '@react-three/drei';
+import * as THREE from 'three';
 import { Earth } from './components/EarthScene';
-import { ChinaMap } from './components/ChinaMap';
 import { MOUNTAINS, type Mountain } from './data/mountains';
+import { latLngToPosition } from './utils/geo';
 import './App.css';
+
+/** Camera fly-to animation via OrbitControls lerp */
+function CameraAnimator({ zoomed, controlsRef }: { zoomed: boolean; controlsRef: React.MutableRefObject<any> }) {
+  useFrame(() => {
+    const ctrl = controlsRef.current;
+    if (!ctrl) return;
+
+    const chinaTarget = latLngToPosition(35, 105, 0.9);
+    const goalTarget = zoomed ? chinaTarget : new THREE.Vector3(0, 0, 0);
+
+    ctrl.target.lerp(goalTarget, 0.05);
+
+    // Smoothly adjust camera distance
+    const goalDist = zoomed ? 2.2 : 4.5;
+    const camPos = ctrl.object.position as THREE.Vector3;
+    const dirFromTarget = camPos.clone().sub(ctrl.target).normalize();
+    const currentDist = camPos.distanceTo(ctrl.target);
+    const newDist = THREE.MathUtils.lerp(currentDist, goalDist, 0.05);
+    camPos.copy(ctrl.target).add(dirFromTarget.multiplyScalar(newDist));
+
+    ctrl.update();
+  });
+  return null;
+}
 
 function App() {
   const [selectedMountain, setSelectedMountain] = useState<Mountain | null>(null);
-  const [viewMode, setViewMode] = useState<'globe' | 'china'>('globe');
+  const [zoomed, setZoomed] = useState(false);
   const controlsRef = useRef<any>(null);
   const idleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const handleUserInteractionStart = useCallback(() => {
-    // User started dragging — cancel pending resume and stop auto-rotate
     if (idleTimerRef.current) {
       clearTimeout(idleTimerRef.current);
       idleTimerRef.current = null;
@@ -24,7 +48,6 @@ function App() {
   }, []);
 
   const handleUserInteractionEnd = useCallback(() => {
-    // User stopped dragging — wait 5 minutes then resume auto-rotate
     idleTimerRef.current = setTimeout(() => {
       if (controlsRef.current) {
         controlsRef.current.autoRotate = true;
@@ -34,7 +57,6 @@ function App() {
 
   return (
     <div className="app">
-      {/* Three.js Canvas */}
       <Canvas
         camera={{ position: [0, 0.3, 4.5], fov: 45 }}
         style={{ position: 'fixed', top: 0, left: 0, zIndex: 0 }}
@@ -57,9 +79,9 @@ function App() {
         <OrbitControls
           ref={controlsRef}
           enablePan={false}
-          minDistance={2.5}
+          minDistance={1.5}
           maxDistance={8}
-          autoRotate
+          autoRotate={!zoomed}
           autoRotateSpeed={0.3}
           enableDamping
           dampingFactor={0.08}
@@ -67,43 +89,43 @@ function App() {
           onEnd={handleUserInteractionEnd}
         />
 
-        <Earth onChinaClick={() => setViewMode('china')} />
-      </Canvas>
+        <CameraAnimator zoomed={zoomed} controlsRef={controlsRef} />
 
-      <ChinaMap
-        visible={viewMode === 'china'}
-        onBack={() => setViewMode('globe')}
-      />
+        <Earth zoomed={zoomed} onChinaClick={() => setZoomed(true)} />
+      </Canvas>
 
       {/* === HTML Overlays === */}
 
       {/* Top info panel */}
-      {viewMode === 'globe' && (
-        <div className="info-panel">
-          <h1 className="title">🌍 世界名山</h1>
-          <p className="subtitle">拖动旋转 · 滚轮缩放 · 悬停标记查看详情</p>
-        </div>
+      <div className="info-panel">
+        <h1 className="title">🌍 世界名山</h1>
+        <p className="subtitle">拖动旋转 · 滚轮缩放 · 点击中国区域查看省份</p>
+      </div>
+
+      {/* Back to globe button */}
+      {zoomed && (
+        <button className="china-back-btn" onClick={() => setZoomed(false)}>
+          ← 返回地球
+        </button>
       )}
 
       {/* Bottom legend */}
-      {viewMode === 'globe' && (
-        <div className="legend">
-          {MOUNTAINS.map((m) => (
-            <button
-              key={m.id}
-              className={`legend-item ${selectedMountain?.id === m.id ? 'active' : ''}`}
-              onClick={() =>
-                setSelectedMountain((prev) => (prev?.id === m.id ? null : m))
-              }
-            >
-              <span className="legend-dot" style={{ background: m.color }} />
-              <span className="legend-name">{m.nameZh}</span>
-              <span className="legend-region">{m.regionZh}</span>
-              <span className="legend-height">{m.height.toLocaleString()}m</span>
-            </button>
-          ))}
-        </div>
-      )}
+      <div className="legend">
+        {MOUNTAINS.map((m) => (
+          <button
+            key={m.id}
+            className={`legend-item ${selectedMountain?.id === m.id ? 'active' : ''}`}
+            onClick={() =>
+              setSelectedMountain((prev) => (prev?.id === m.id ? null : m))
+            }
+          >
+            <span className="legend-dot" style={{ background: m.color }} />
+            <span className="legend-name">{m.nameZh}</span>
+            <span className="legend-region">{m.regionZh}</span>
+            <span className="legend-height">{m.height.toLocaleString()}m</span>
+          </button>
+        ))}
+      </div>
 
       {/* Mountain detail card */}
       {selectedMountain && (

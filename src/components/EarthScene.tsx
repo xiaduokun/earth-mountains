@@ -4,6 +4,7 @@ import { Html, useTexture } from '@react-three/drei';
 import * as THREE from 'three';
 import { MOUNTAINS, type Mountain } from '../data/mountains';
 import { latLngToPosition } from '../utils/geo';
+import { ProvinceLines } from './ProvinceLines';
 
 const EARTH_RADIUS = 1.5;
 const MIN_HEIGHT = 3724;
@@ -135,7 +136,7 @@ function MountainMarker({ mountain }: { mountain: Mountain }) {
   );
 }
 
-export function Earth({ onChinaClick }: { onChinaClick?: () => void }) {
+export function Earth({ onChinaClick, zoomed }: { onChinaClick?: () => void; zoomed?: boolean }) {
   const earthTexture = useMemo(() => {
     const textureUrl =
       'https://unpkg.com/three-globe/example/img/earth-blue-marble.jpg';
@@ -200,6 +201,9 @@ export function Earth({ onChinaClick }: { onChinaClick?: () => void }) {
           uniforms={atmosphereUniforms}
         />
       </mesh>
+
+      {/* China province boundary lines */}
+      <ProvinceLines visible={!!zoomed} />
 
       {/* Mountain 3D markers */}
       {MOUNTAINS.map((mountain) => (
