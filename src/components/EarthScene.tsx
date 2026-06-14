@@ -1,4 +1,4 @@
-import { useRef, useMemo, useState } from 'react';
+import { useRef, useMemo, useState, useCallback } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
 import { Html, useTexture } from '@react-three/drei';
 import * as THREE from 'three';
@@ -135,7 +135,7 @@ function MountainMarker({ mountain }: { mountain: Mountain }) {
   );
 }
 
-export function Earth() {
+export function Earth({ onChinaClick }: { onChinaClick?: () => void }) {
   const earthTexture = useMemo(() => {
     const textureUrl =
       'https://unpkg.com/three-globe/example/img/earth-blue-marble.jpg';
@@ -149,10 +149,26 @@ export function Earth() {
     []
   );
 
+  const handleEarthClick = useCallback(
+    (event: any) => {
+      if (!onChinaClick || !event.point) return;
+      const point = event.point as THREE.Vector3;
+      const normal = point.clone().normalize();
+      const phi = Math.acos(normal.y);
+      const lat = 90 - (phi * 180) / Math.PI;
+      const theta = Math.atan2(-normal.x, normal.z);
+      const lng = (theta * 180) / Math.PI;
+      if (lat >= 18 && lat <= 54 && lng >= 73 && lng <= 135) {
+        onChinaClick();
+      }
+    },
+    [onChinaClick]
+  );
+
   return (
     <group>
       {/* Earth sphere */}
-      <mesh>
+      <mesh onClick={handleEarthClick}>
         <sphereGeometry args={[EARTH_RADIUS, 64, 64]} />
         <meshStandardMaterial
           map={earthTexture}
