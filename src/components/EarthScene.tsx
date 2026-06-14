@@ -27,7 +27,6 @@ function mountainProfile(baseRadius: number, height: number): THREE.Vector2[] {
   return points;
 }
 
-const LINE_SEGMENTS = 3; // peak → elbow → label, 3 points
 
 function MountainMarker({ mountain }: { mountain: Mountain }) {
   const meshRef = useRef<THREE.Mesh>(null);
@@ -56,6 +55,8 @@ function MountainMarker({ mountain }: { mountain: Mountain }) {
     return q;
   }, [normal]);
 
+  const invQuat = useMemo(() => quaternion.clone().invert(), [quaternion]);
+
   const mountainHeight = useMemo(() => calcMountainHeight(mountain.height), [mountain.height]);
   const baseRadius = mountainHeight * 0.4;
 
@@ -64,13 +65,10 @@ function MountainMarker({ mountain }: { mountain: Mountain }) {
     [baseRadius, mountainHeight]
   );
 
-  // Peak relative to mountain base (local space)
-  const peakLocal = useMemo(() => new THREE.Vector3(0, mountainHeight, 0), [mountainHeight]);
-
-  // Pre-allocate line geometry positions (3 points × 3 coords)
+  // Pre-allocate line geometry (3 points = L-shaped connector)
   const lineObj = useMemo(() => {
+    const arr = new Float32Array(9); // 3 points × xyz
     const geo = new THREE.BufferGeometry();
-    const arr = new Float32Array(LINE_SEGMENTS * 3);
     geo.setAttribute('position', new THREE.BufferAttribute(arr, 3));
     const mat = new THREE.LineDashedMaterial({
       color: mountain.color,
@@ -78,6 +76,7 @@ function MountainMarker({ mountain }: { mountain: Mountain }) {
       gapSize: 0.006,
       transparent: true,
       opacity: 0.85,
+      depthTest: true,
     });
     const line = new THREE.Line(geo, mat);
     lineGeoRef.current = geo;
@@ -97,71 +96,74 @@ function MountainMarker({ mountain }: { mountain: Mountain }) {
       mat.transparent = true;
     }
 
-    // Compute screen-right vector in world space
-    const camRight = new THREE.Vector3()
+    // Screen-right in WORLD space, then transform to LOCAL space
+    const camRightWorld = new THREE.Vector3()
       .crossVectors(camera.up, cameraDir)
       .normalize();
+    const camRightLocal = camRightWorld.clone().applyQuaternion(invQuat);
 
-    // Peak in world space
-    const peakWorld = peakLocal.clone().applyQuaternion(quaternion).add(meshPos);
+    // Peak and label anchor in LOCAL space
+    const peakY = mountainHeight;
+    const labelX = camRightLocal.x * 0.065;
+    const labelY = peakY * 0.5;
+    const labelZ = camRightLocal.z * 0.065;
 
-    // Label world position: peak + screen-right × offset - slight vertical drop
-    const labelOffset = camRight.clone().multiplyScalar(0.07);
-    const labelWorld = peakWorld.clone()
-      .add(labelOffset)
-      .add(new THREE.Vector3(0, -mountainHeight * 0.45, 0));
-
-    // Update label group position
+    // Update label group position (local space)
     if (labelGroupRef.current) {
-      labelGroupRef.current.position.copy(labelWorld);
-    }
-    // Fade label DOM element
-    if (labelDivRef.current) {
-      labelDivRef.current.style.opacity = String(opacity);
+      labelGroupRef.current.position.set(labelX, labelY, labelZ);
     }
 
-    // Update dashed line: peak → elbow → label
+    // Update dashed line in LOCAL space: peak → elbow → label
     if (lineGeoRef.current && lineMatRef.current) {
-      const elbow = peakWorld.clone().add(camRight.clone().multiplyScalar(0.06));
+      const elbowX = camRightLocal.x * 0.045;
+      const elbowZ = camRightLocal.z * 0.045;
       const pos = lineGeoRef.current.attributes.position.array as Float32Array;
-      pos[0] = peakWorld.x; pos[1] = peakWorld.y; pos[2] = peakWorld.z;
-      pos[3] = elbow.x;     pos[4] = elbow.y;     pos[5] = elbow.z;
-      pos[6] = labelWorld.x; pos[7] = labelWorld.y; pos[8] = labelWorld.z;
+      // point 0: peak
+      pos[0] = 0;       pos[1] = peakY;   pos[2] = 0;
+      // point 1: elbow
+      pos[3] = elbowX;  pos[4] = peakY;   pos[5] = elbowZ;
+      // point 2: label anchor
+      pos[6] = labelX;  pos[7] = labelY;  pos[8] = labelZ;
       lineGeoRef.current.attributes.position.needsUpdate = true;
+      lineGeoRef.current.computeBoundingSphere();
       lineObj.computeLineDistances();
 
       lineMatRef.current.opacity = opacity;
       lineMatRef.current.transparent = true;
+    }
+
+    // Fade label DOM element
+    if (labelDivRef.current) {
+      labelDivRef.current.style.opacity = String(opacity);
+      labelDivRef.current.style.pointerEvents = opacity > 0.3 ? 'auto' : 'none';
     }
   });
 
   const targetScale = hovered ? 1.5 : 1;
 
   return (
-    <>
-      {/* Mountain — rotated group (aligned to Earth surface normal) */}
-      <group position={meshPos} quaternion={quaternion}>
-        <mesh
-          ref={meshRef}
-          geometry={mountainGeom}
-          onPointerEnter={() => setHovered(true)}
-          onPointerLeave={() => setHovered(false)}
-          scale={[targetScale, targetScale, targetScale]}
-        >
-          <meshStandardMaterial
-            map={texture}
-            roughness={0.7}
-            metalness={0.05}
-            transparent
-            opacity={1}
-          />
-        </mesh>
-      </group>
+    <group position={meshPos} quaternion={quaternion}>
+      {/* 3D Mountain Mesh */}
+      <mesh
+        ref={meshRef}
+        geometry={mountainGeom}
+        onPointerEnter={() => setHovered(true)}
+        onPointerLeave={() => setHovered(false)}
+        scale={[targetScale, targetScale, targetScale]}
+      >
+        <meshStandardMaterial
+          map={texture}
+          roughness={0.7}
+          metalness={0.05}
+          transparent
+          opacity={1}
+        />
+      </mesh>
 
-      {/* Dashed connector — world space, updated each frame */}
+      {/* Dashed connector — local space, updated each frame */}
       <primitive object={lineObj} />
 
-      {/* Label — world space, always screen-right of the peak */}
+      {/* Label — local space, always screen-right of peak */}
       <group ref={labelGroupRef}>
         <Html center style={{ pointerEvents: 'none' }}>
           <div
@@ -174,7 +176,7 @@ function MountainMarker({ mountain }: { mountain: Mountain }) {
           </div>
         </Html>
       </group>
-    </>
+    </group>
   );
 }
 
