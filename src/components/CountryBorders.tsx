@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
-import { useThree } from '@react-three/fiber';
+import { useEffect, useRef, useState } from 'react';
+import { useFrame, useThree } from '@react-three/fiber';
 import { Html } from '@react-three/drei';
 import * as THREE from 'three';
 import { feature } from 'topojson-client';
@@ -9,16 +9,19 @@ import { latLngToPosition } from '../utils/geo';
 const WORLD_TOPO_URL = 'https://unpkg.com/world-atlas@2/countries-110m.json';
 const R = 1.5 + 0.015;
 const LABEL_R = 1.5 + 0.025;
-const BORDER_COLOR = '#887744';
+const BORDER_COLOR = '#4dc9f6';
 
 interface CountryLabel {
   name: string;
   pos: THREE.Vector3;
+  normal: THREE.Vector3;
 }
+type LabelEntry = { normal: THREE.Vector3; el: HTMLSpanElement };
 
 export function CountryBorders() {
   const [lines, setLines] = useState<THREE.Line[]>([]);
   const [labels, setLabels] = useState<CountryLabel[]>([]);
+  const labelRefs = useRef<LabelEntry[]>([]);
   const { camera } = useThree();
 
   useEffect(() => {
@@ -31,9 +34,13 @@ export function CountryBorders() {
 
         (geojson as any).features.forEach((f: any) => {
           const rings = extractPolygonCoords(f.geometry);
-          const name: string = f.properties?.name;
+          const name: string =
+            f.properties?.name ||
+            f.properties?.NAME ||
+            f.properties?.admin ||
+            f.properties?.name_long ||
+            '';
 
-          // First ring = outer boundary → compute centroid for label
           if (name && rings.length > 0 && rings[0].length > 4) {
             const outerRing = rings[0];
             let sumLng = 0;
@@ -45,13 +52,16 @@ export function CountryBorders() {
             const avgLng = sumLng / outerRing.length;
             const avgLat = sumLat / outerRing.length;
 
-            // Only show labels for reasonably-sized countries
-            const spanLng = Math.max(...outerRing.map((c) => c[0])) -
-              Math.min(...outerRing.map((c) => c[0]));
-            if (spanLng > 0.5) {
+            const lngVals = outerRing.map((c) => c[0]);
+            const spanLng = Math.max(...lngVals) - Math.min(...lngVals);
+            // Crosses antimeridian (e.g. Russia, Fiji) — use alternative check
+            const effectiveSpan = spanLng > 300 ? 360 - spanLng : spanLng;
+            if (effectiveSpan > 0.3) {
+              const pos = latLngToPosition(avgLat, avgLng, LABEL_R);
               labelResult.push({
                 name,
-                pos: latLngToPosition(avgLat, avgLng, LABEL_R),
+                pos,
+                normal: latLngToPosition(avgLat, avgLng, 1).normalize(),
               });
             }
           }
@@ -79,7 +89,27 @@ export function CountryBorders() {
       .catch((err) => console.warn('Failed to load world borders:', err));
   }, []);
 
+  // Clear refs when labels change
+  useEffect(() => {
+    labelRefs.current = [];
+  }, [labels]);
+
+  useFrame(() => {
+    const cameraDir = camera.position.clone().normalize();
+    for (const entry of labelRefs.current) {
+      const facing = entry.normal.dot(cameraDir);
+      const opacity = THREE.MathUtils.clamp((facing + 0.05) / 0.2, 0, 1);
+      entry.el.style.opacity = String(opacity);
+    }
+  });
+
   if (lines.length === 0) return null;
+
+  const registerLabel = (normal: THREE.Vector3) => (el: HTMLSpanElement | null) => {
+    if (el) {
+      labelRefs.current.push({ normal, el });
+    }
+  };
 
   return (
     <group>
@@ -94,11 +124,12 @@ export function CountryBorders() {
           style={{ pointerEvents: 'none' }}
         >
           <span
+            ref={registerLabel(label.normal)}
             style={{
               fontSize: '8px',
-              color: 'rgba(255,255,255,0.5)',
+              color: 'rgba(200,240,255,0.55)',
               whiteSpace: 'nowrap',
-              textShadow: '0 0 2px rgba(0,0,0,0.8)',
+              textShadow: '0 0 3px rgba(0,150,200,0.6)',
               fontFamily: 'sans-serif',
             }}
           >
