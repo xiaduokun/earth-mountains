@@ -6,7 +6,7 @@ import { latLngToPosition } from '../utils/geo';
 
 const WORLD_TOPO_URL = 'https://unpkg.com/world-atlas@2/countries-110m.json';
 const R = 1.5 + 0.015;
-const BORDER_COLOR = '#aac8e0';
+const BORDER_COLOR = '#ffcc66';
 
 export function CountryBorders() {
   const [lines, setLines] = useState<THREE.Line[]>([]);
@@ -30,8 +30,8 @@ export function CountryBorders() {
             const mat = new THREE.LineBasicMaterial({
               color: BORDER_COLOR,
               transparent: true,
-              opacity: 0.5,
-              depthTest: true,
+              opacity: 1,
+              depthTest: false,
             });
             const line = new THREE.Line(geo, mat);
             line.frustumCulled = false;
