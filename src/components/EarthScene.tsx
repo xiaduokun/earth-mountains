@@ -29,6 +29,7 @@ function mountainProfile(baseRadius: number, height: number): THREE.Vector2[] {
 
 function MountainMarker({ mountain }: { mountain: Mountain }) {
   const meshRef = useRef<THREE.Mesh>(null);
+  const lineRef = useRef<THREE.Line>(null);
   const [hovered, setHovered] = useState(false);
   const { camera } = useThree();
 
@@ -58,6 +59,20 @@ function MountainMarker({ mountain }: { mountain: Mountain }) {
     [baseRadius, mountainHeight]
   );
 
+  const labelX = 0.08;
+  const labelY = mountainHeight * 0.55;
+  const peakY = mountainHeight;
+
+  const lineGeometry = useMemo(() => {
+    const pts = [
+      new THREE.Vector3(0, peakY, 0),
+      new THREE.Vector3(labelX - 0.025, peakY, 0),
+      new THREE.Vector3(labelX, labelY, 0),
+    ];
+    const geo = new THREE.BufferGeometry().setFromPoints(pts);
+    return geo;
+  }, [peakY, labelY]);
+
   useFrame(() => {
     const cameraDir = camera.position.clone().normalize();
     const facing = normal.dot(cameraDir);
@@ -65,6 +80,11 @@ function MountainMarker({ mountain }: { mountain: Mountain }) {
 
     if (meshRef.current) {
       const mat = meshRef.current.material as THREE.MeshStandardMaterial;
+      mat.opacity = opacity;
+      mat.transparent = true;
+    }
+    if (lineRef.current) {
+      const mat = lineRef.current.material as THREE.LineDashedMaterial;
       mat.opacity = opacity;
       mat.transparent = true;
     }
@@ -91,8 +111,22 @@ function MountainMarker({ mountain }: { mountain: Mountain }) {
         />
       </mesh>
 
-      {/* Label — kept as HTML overlay */}
-      <Html position={[0, mountainHeight + 0.06, 0]} center style={{ pointerEvents: 'none' }}>
+      {/* Dashed connector line */}
+      <lineSegments
+        ref={lineRef}
+        geometry={lineGeometry}
+      >
+        <lineDashedMaterial
+          color={mountain.color}
+          dashSize={0.015}
+          gapSize={0.008}
+          transparent
+          opacity={0.8}
+        />
+      </lineSegments>
+
+      {/* Label — right side of the mountain */}
+      <Html position={[labelX + 0.01, labelY, 0]} center={false} style={{ pointerEvents: 'none' }}>
         <div
           className="mountain-label"
           style={{
