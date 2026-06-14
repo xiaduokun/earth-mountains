@@ -5,6 +5,7 @@ import * as THREE from 'three';
 import { MOUNTAINS, type Mountain } from '../data/mountains';
 import { latLngToPosition } from '../utils/geo';
 import { ProvinceLines } from './ProvinceLines';
+import { CountryBorders } from './CountryBorders';
 
 const EARTH_RADIUS = 1.5;
 const MIN_HEIGHT = 3724;
@@ -202,7 +203,10 @@ export function Earth({ onChinaClick, zoomed }: { onChinaClick?: () => void; zoo
         />
       </mesh>
 
-      {/* China province boundary lines */}
+      {/* World country borders — always visible */}
+      <CountryBorders />
+
+      {/* China province boundary lines — visible when zoomed in */}
       <ProvinceLines visible={!!zoomed} />
 
       {/* Mountain 3D markers */}
