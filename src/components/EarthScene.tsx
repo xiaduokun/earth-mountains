@@ -82,9 +82,9 @@ function MountainMarker({ mountain }: { mountain: Mountain }) {
     const camRightLocal = camRightWorld.clone().applyQuaternion(invQuat);
 
     // Label positioned to the screen-right of the peak
-    const labelX = camRightLocal.x * 0.2;
+    const labelX = camRightLocal.x * 0.13;
     const labelY = mountainHeight * 0.5;
-    const labelZ = camRightLocal.z * 0.2;
+    const labelZ = camRightLocal.z * 0.13;
 
     if (labelGroupRef.current) {
       labelGroupRef.current.position.set(labelX, labelY, labelZ);
