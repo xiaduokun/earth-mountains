@@ -32,7 +32,6 @@ function MountainMarker({ mountain }: { mountain: Mountain }) {
   const meshRef = useRef<THREE.Mesh>(null);
   const labelGroupRef = useRef<THREE.Group>(null);
   const labelDivRef = useRef<HTMLDivElement>(null);
-  const lineRef = useRef<THREE.Line>(null);
   const [hovered, setHovered] = useState(false);
   const { camera } = useThree();
 
@@ -64,30 +63,6 @@ function MountainMarker({ mountain }: { mountain: Mountain }) {
     [baseRadius, mountainHeight]
   );
 
-  // Pre-build line with valid initial positions so it renders frame 0
-  const lineObj = useMemo(() => {
-    const h = mountainHeight;
-    const arr = new Float32Array([
-      0, h,     0,       // point 0: peak
-      0.01, h,  0,       // point 1: elbow
-      0.01, h * 0.5, 0,  // point 2: label anchor
-    ]);
-    const geo = new THREE.BufferGeometry();
-    geo.setAttribute('position', new THREE.BufferAttribute(arr, 3));
-    const mat = new THREE.LineDashedMaterial({
-      color: mountain.color,
-      dashSize: 0.018,
-      gapSize: 0.009,
-      transparent: true,
-      opacity: 0.85,
-    });
-    const line = new THREE.Line(geo, mat);
-    line.frustumCulled = false;
-    line.computeLineDistances();
-    lineRef.current = line;
-    return line;
-  }, [mountain.color, mountainHeight]);
-
   useFrame(() => {
     const cameraDir = camera.position.clone().normalize();
     const facing = normal.dot(cameraDir);
@@ -106,30 +81,13 @@ function MountainMarker({ mountain }: { mountain: Mountain }) {
       .normalize();
     const camRightLocal = camRightWorld.clone().applyQuaternion(invQuat);
 
-    const peakY = mountainHeight;
-    const labelX = camRightLocal.x * 0.065;
-    const labelY = peakY * 0.5;
-    const labelZ = camRightLocal.z * 0.065;
+    // Label positioned to the screen-right of the peak
+    const labelX = camRightLocal.x * 0.1;
+    const labelY = mountainHeight * 0.5;
+    const labelZ = camRightLocal.z * 0.1;
 
-    // Label position
     if (labelGroupRef.current) {
       labelGroupRef.current.position.set(labelX, labelY, labelZ);
-    }
-
-    // Dashed line: peak → elbow → label
-    if (lineRef.current) {
-      const elbowX = camRightLocal.x * 0.045;
-      const elbowZ = camRightLocal.z * 0.045;
-      const pos = lineRef.current.geometry.attributes.position.array as Float32Array;
-      pos[0] = 0;       pos[1] = peakY;   pos[2] = 0;
-      pos[3] = elbowX;  pos[4] = peakY;   pos[5] = elbowZ;
-      pos[6] = labelX;  pos[7] = labelY;  pos[8] = labelZ;
-      lineRef.current.geometry.attributes.position.needsUpdate = true;
-      lineRef.current.computeLineDistances();
-
-      const mat = lineRef.current.material as THREE.LineDashedMaterial;
-      mat.opacity = opacity;
-      mat.transparent = true;
     }
 
     // Label fade
@@ -160,10 +118,7 @@ function MountainMarker({ mountain }: { mountain: Mountain }) {
         />
       </mesh>
 
-      {/* Dashed connector line */}
-      <primitive object={lineObj} />
-
-      {/* Label */}
+      {/* Label — always screen-right of peak */}
       <group ref={labelGroupRef}>
         <Html center style={{ pointerEvents: 'none' }}>
           <div
