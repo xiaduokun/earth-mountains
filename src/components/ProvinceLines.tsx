@@ -4,7 +4,7 @@ import { latLngToPosition } from '../utils/geo';
 
 const CHINA_GEO_URL =
   'https://geo.datav.aliyun.com/areas_v3/bound/100000_full.json';
-const R = 1.5 + 0.005; // slightly above Earth surface
+const R = 1.5 + 0.015; // slightly above Earth surface
 const LINE_COLOR = 'rgba(100, 180, 255, 0.6)';
 const BORDER_COLOR = 'rgba(255, 200, 100, 0.8)'; // national border
 
