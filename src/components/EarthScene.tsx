@@ -54,24 +54,39 @@ function MountainMarker({ mountain }: { mountain: Mountain }) {
   const mountainHeight = useMemo(() => calcMountainHeight(mountain.height), [mountain.height]);
   const baseRadius = mountainHeight * 0.4;
 
-  const geometry = useMemo(
+  const mountainGeom = useMemo(
     () => new THREE.LatheGeometry(mountainProfile(baseRadius, mountainHeight), 16),
     [baseRadius, mountainHeight]
   );
 
-  const labelX = 0.08;
-  const labelY = mountainHeight * 0.55;
-  const peakY = mountainHeight;
-
-  const lineGeometry = useMemo(() => {
+  const { labelX, labelY, lineGeometry } = useMemo(() => {
+    const peakY = mountainHeight;
+    const labelX = 0.07;
+    const labelY = mountainHeight * 0.5;
+    // L-shaped connector: peak → horizontal elbow → label anchor
     const pts = [
-      new THREE.Vector3(0, peakY, 0),
-      new THREE.Vector3(labelX - 0.025, peakY, 0),
-      new THREE.Vector3(labelX, labelY, 0),
+      new THREE.Vector3(0, peakY, 0),           // mountain peak
+      new THREE.Vector3(labelX, peakY, 0),       // elbow (same height, to the right)
+      new THREE.Vector3(labelX, labelY, 0),       // label anchor point
     ];
     const geo = new THREE.BufferGeometry().setFromPoints(pts);
-    return geo;
-  }, [peakY, labelY]);
+    return { labelX, labelY, lineGeometry: geo };
+  }, [mountainHeight]);
+
+  const lineObj = useMemo(() => {
+    const line = new THREE.Line(
+      lineGeometry,
+      new THREE.LineDashedMaterial({
+        color: mountain.color,
+        dashSize: 0.012,
+        gapSize: 0.006,
+        transparent: true,
+        opacity: 0.85,
+      }),
+    );
+    line.computeLineDistances();
+    return line;
+  }, [lineGeometry, mountain.color]);
 
   useFrame(() => {
     const cameraDir = camera.position.clone().normalize();
@@ -84,7 +99,7 @@ function MountainMarker({ mountain }: { mountain: Mountain }) {
       mat.transparent = true;
     }
     if (lineRef.current) {
-      const mat = lineRef.current.material as THREE.LineDashedMaterial;
+      const mat = lineRef.current.material as THREE.LineBasicMaterial;
       mat.opacity = opacity;
       mat.transparent = true;
     }
@@ -97,7 +112,7 @@ function MountainMarker({ mountain }: { mountain: Mountain }) {
       {/* 3D Mountain Mesh */}
       <mesh
         ref={meshRef}
-        geometry={geometry}
+        geometry={mountainGeom}
         onPointerEnter={() => setHovered(true)}
         onPointerLeave={() => setHovered(false)}
         scale={[targetScale, targetScale, targetScale]}
@@ -111,27 +126,15 @@ function MountainMarker({ mountain }: { mountain: Mountain }) {
         />
       </mesh>
 
-      {/* Dashed connector line */}
-      <lineSegments
-        ref={lineRef}
-        geometry={lineGeometry}
-      >
-        <lineDashedMaterial
-          color={mountain.color}
-          dashSize={0.015}
-          gapSize={0.008}
-          transparent
-          opacity={0.8}
-        />
-      </lineSegments>
+      {/* Dashed connector: peak → label */}
+      <primitive object={lineObj} ref={lineRef} />
 
-      {/* Label — right side of the mountain */}
-      <Html position={[labelX + 0.01, labelY, 0]} center={false} style={{ pointerEvents: 'none' }}>
+      {/* Label — right side */}
+      <Html position={[labelX + 0.005, labelY, 0]} center={false} style={{ pointerEvents: 'none', transform: 'translateY(-50%)' }}>
         <div
           className="mountain-label"
           style={{
             borderColor: mountain.color,
-            opacity: 1,
           }}
         >
           <div className="mountain-name">{mountain.nameZh}</div>
